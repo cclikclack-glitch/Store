@@ -146,17 +146,21 @@ app.post("/admin/store",(req,res)=>{
 });
 
 // === UPLOAD PHOTO ===
-app.post("/admin/upload-img", express.json({limit:"14mb"}), async (req,res)=>{
+app.post("/admin/upload-img", express.json({limit:"20mb"}), async (req,res)=>{
   try{
     if(req.query.k!==KEY) return res.status(403).json({error:"Acces refuse"});
-    const b64 = (req.body.data||"").split(",")[1]||"";
-    const buf = Buffer.from(b64,"base64");
-    if(!buf.length || buf.length>10*1024*1024) return res.json({error:"Image trop grande (max 10 Mo)"});
-    const r = await fetch("https://0x0.st",{method:"PUT",body:buf,headers:{"Content-Type":req.body.type||"image/jpeg"}});
+    const b64=(req.body.data||"").split(",")[1]||"";
+    const buf=Buffer.from(b64,"base64");
+    if(!buf.length) return res.json({error:"Image vide"});
+    if(buf.length>15*1024*1024) return res.json({error:"Image trop grande (max 15 Mo)"});
+    const form=new FormData();
+    form.append("reqtype","fileupload");
+    form.append("fileToUpload", new Blob([buf],{type:req.body.type||"image/jpeg"}), "produit.jpg");
+    const r=await fetch("https://catbox.moe/user/api.php",{method:"POST",body:form});
     const url=(await r.text()).trim();
-    if(!url.startsWith("http")) return res.json({error:"Echec upload, reessayez"});
+    if(!url.startsWith("http")) return res.json({error:"Refus: "+url.slice(0,90)});
     res.json({url});
-  }catch(e){ res.json({error:"Echec upload"}); }
+  }catch(e){ res.json({error:"Erreur: "+String(e).slice(0,90)}); }
 });
 
 app.post("/admin/addcat",(req,res)=>{
