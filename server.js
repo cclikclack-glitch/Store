@@ -16,8 +16,8 @@ const COLORS = {
 };
 
 function load(){
-  try { return JSON.parse(fs.readFileSync(DATA,"utf8")); }
-  catch(e){ return {store:{name:"MA BOUTIQUE",tagline:"",whatsapp:"212600000000",city:"",banner:"Bienvenue",instagram:""},products:[]}; }
+  try { const d = JSON.parse(fs.readFileSync(DATA,"utf8")); if(!d.cats) d.cats = {...CATS}; return d; }
+  catch(e){ return {store:{name:"MA BOUTIQUE",tagline:"",whatsapp:"212600000000",city:"",banner:"Bienvenue",instagram:""},products:[],cats:{...CATS}}; }
 }
 function save(d){ fs.writeFileSync(DATA, JSON.stringify(d,null,2)); }
 if(!fs.existsSync(DATA)) save(load());
@@ -51,9 +51,9 @@ app.post("/admin/login", (req,res)=>{
 app.get("/admin/panel", (req,res)=>{
   if(req.query.k !== KEY) return res.redirect("/admin");
   const d = load(); const s = d.store;
-  const catOpts = Object.entries(CATS).map(([k,v])=>`<option value="${k}">${v}</option>`).join("");
+  const catOpts = Object.entries(d.cats||CATS).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join("");
   const colOpts = Object.entries(COLORS).map(([k,v])=>`<option value="${k}">${v}</option>`).join("");
-  const list = d.products.map(p=>`<div class="prod"><span><b>${esc(p.emoji)} ${esc(p.name)}</b><br>
+  const list = d.products.map(p=>`<div class="prod"><span>${p.image?`<img src="${esc(p.image)}" style="width:44px;height:44px;object-fit:cover;border-radius:8px;vertical-align:middle;margin-right:8px">`:""}<b>${esc(p.emoji)} ${esc(p.name)}</b><br>
     <span style="font-size:12px;color:#a08090">${esc(CATS[p.cat]||p.cat)} · stock: ${esc(p.stock)}</span></span>
     <span><span class="pr">${esc(p.price)} DH</span>
     <a href="/admin/del?id=${p.id}&k=${encodeURIComponent(KEY)}" onclick="return confirm('Supprimer ce produit ?')">Suppr.</a></span></div>`).join("") || '<p style="color:#a08090;font-size:13px">Aucun produit pour le moment.</p>';
@@ -78,8 +78,36 @@ ${req.query.ok?'<div class="ok">Enregistre avec succes</div>':''}
 <div><label>Stock</label><input name="stock" value="5"></div></div>
 <div class="two"><div><label>Categorie</label><select name="cat">${catOpts}</select></div>
 <div><label>Couleur</label><select name="color">${colOpts}</select></div></div>
-<label>Emoji</label><input name="emoji" value="🧴">
-<button class="big">Ajouter le produit</button></form></div>
+<label>Emoji (si pas de photo)</label><input name="emoji" value="🧴">
+<label>Photo du produit (facultatif)</label>
+<input type="file" id="photo" accept="image/*" onchange="pvPhoto(this)">
+<img id="pv" style="display:none;max-width:100%;border-radius:10px;margin-top:6px">
+<input type="hidden" name="image" id="imgurl">
+<script>
+var PH=null;
+function pvPhoto(inp){var f=inp.files[0];if(!f)return;var r=new FileReader();
+r.onload=function(e){document.getElementById("pv").src=e.target.result;document.getElementById("pv").style.display="block";PH={data:e.target.result,type:f.type};};
+r.readAsDataURL(f);}
+</script>
+<button class="big" id="btnAdd" onclick="return upThenSend(this)">Ajouter le produit</button></form></div>
+<script>
+function upThenSend(btn){
+  if(!PH) return true;
+  btn.textContent="Envoi de la photo...";
+  fetch("/admin/upload-img?k=${encodeURIComponent(KEY)}",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(PH)})
+  .then(r=>r.json()).then(j=>{
+    if(j.url){document.getElementById("imgurl").value=j.url;PH=null;btn.closest("form").submit();}
+    else{alert(j.error||"Echec envoi");btn.textContent="Ajouter le produit";}
+  }).catch(()=>{btn.textContent="Ajouter le produit";});
+  return false;
+}
+</script>
+<div class="card"><h2>Categories</h2>
+<form method="post" action="/admin/addcat?k=${encodeURIComponent(KEY)}" style="display:flex;gap:8px;margin-bottom:12px">
+<input name="label" placeholder="Nouvelle categorie (ex: Sacs)" required style="flex:1">
+<button class="big" style="width:auto;margin:0;padding:10px 16px">+ Ajouter</button></form>
+${Object.entries(d.cats||{}).map(([k,v])=>`<span style="display:inline-block;background:#fbe3ec;color:#a4446c;font-size:12px;font-weight:bold;padding:5px 12px;border-radius:12px;margin:0 6px 8px 0">${esc(v)} <a href="/admin/delcat?c=${k}&k=${encodeURIComponent(KEY)}" onclick="return confirm('Supprimer cette categorie ?')" style="color:#c0392b;text-decoration:none">×</a></span>`).join("")}
+</div>
 <div class="card"><h2>Mes produits (${d.products.length})</h2>${list}</div>
 <div class="card"><h2>Informations boutique</h2>
 <form method="post" action="/admin/store?k=${encodeURIComponent(KEY)}">
@@ -98,7 +126,7 @@ app.post("/admin/add",(req,res)=>{
   const d=load();
   d.products.push({id:Date.now(),name:req.body.name||"Produit",price:req.body.price||"0",
     cat:req.body.cat||"misk",color:req.body.color||"#f5e0c8,#e0b888",
-    emoji:req.body.emoji||"🧴",stock:req.body.stock||"5"});
+    emoji:req.body.emoji||"🧴",stock:req.body.stock||"5",image:req.body.image||""});
   save(d); res.redirect("/admin/panel?k="+encodeURIComponent(KEY)+"&ok=1");
 });
 
@@ -117,6 +145,34 @@ app.post("/admin/store",(req,res)=>{
   save(d); res.redirect("/admin/panel?k="+encodeURIComponent(KEY)+"&ok=1");
 });
 
+// === UPLOAD PHOTO ===
+app.post("/admin/upload-img", express.json({limit:"14mb"}), async (req,res)=>{
+  try{
+    if(req.query.k!==KEY) return res.status(403).json({error:"Acces refuse"});
+    const b64 = (req.body.data||"").split(",")[1]||"";
+    const buf = Buffer.from(b64,"base64");
+    if(!buf.length || buf.length>10*1024*1024) return res.json({error:"Image trop grande (max 10 Mo)"});
+    const r = await fetch("https://0x0.st",{method:"PUT",body:buf,headers:{"Content-Type":req.body.type||"image/jpeg"}});
+    const url=(await r.text()).trim();
+    if(!url.startsWith("http")) return res.json({error:"Echec upload, reessayez"});
+    res.json({url});
+  }catch(e){ res.json({error:"Echec upload"}); }
+});
+
+app.post("/admin/addcat",(req,res)=>{
+  if(req.query.k!==KEY) return res.redirect("/admin");
+  const d=load();
+  const label=(req.body.label||"").trim();
+  const key=label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||("cat"+Date.now());
+  if(label){ d.cats=d.cats||{}; d.cats[key]=label; save(d); }
+  res.redirect("/admin/panel?k="+encodeURIComponent(KEY)+"&ok=1");
+});
+app.get("/admin/delcat",(req,res)=>{
+  if(req.query.k!==KEY) return res.redirect("/admin");
+  const d=load(); if(d.cats) delete d.cats[req.query.c];
+  save(d); res.redirect("/admin/panel?k="+encodeURIComponent(KEY));
+});
+
 // ============ BOUTIQUE ============
 app.get("/",(req,res)=>{
   const d=load(); const s=d.store;
@@ -126,7 +182,7 @@ app.get("/",(req,res)=>{
     const c=p.color||"#f5e0c8,#e0b888";
     const link="https://wa.me/"+wa+"?text="+encodeURIComponent("Bonjour "+(s.name||"")+", je veux commander: "+p.name+" — "+p.price+" DH. C'est disponible ?");
     return `<div class="p" data-c="${esc(p.cat)}">
-    <div class="img" style="background:linear-gradient(135deg,${c})">${esc(p.emoji)}</div>
+    <div class="img" style="background:linear-gradient(135deg,${c});overflow:hidden">${p.image?`<img src="${esc(p.image)}" style="width:100%;height:100%;object-fit:cover" loading="lazy">`:esc(p.emoji)}</div>
     <div class="info"><div class="name">${esc(p.name)}</div><div class="price">${esc(p.price)} DH</div>
     <a class="btn" target="_blank" href="${link}">Je le veux</a>
     <div class="stock">En stock (${esc(p.stock)})</div></div></div>`;
