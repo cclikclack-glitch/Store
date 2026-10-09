@@ -5,97 +5,132 @@ const path = require("path");
 const app = express();
 app.use(express.urlencoded({ extended: true }));
 
-const PASSWORD = process.env.ADMIN_PASSWORD || "aqua2026"; // <-- change dans Railway Variables
-const DATA = process.env.DATA_DIR ? path.join(process.env.DATA_DIR, "data.json")
-                                 : path.join(__dirname, "data.json");
+const PASSWORD = process.env.ADMIN_PASSWORD || "aqua2026";
+const KEY = process.env.ADMIN_KEY || "clef12345";
+const DATA = path.join(__dirname, "data.json");
+
 const CATS = { misk:"Musc", rose:"Roses", oud:"Oud", care:"Soins" };
-const COLORS = { "#f5e0c8,#e0b888":"Dore", "#f8c8d8,#e890a8":"Rose", "#ffffff,#e8e0e8":"Blanc",
-  "#c8a880,#8f6a45":"Oud brun", "#e8c8e0,#b890c8":"Violet", "#c8e0d8,#88b8a8":"Vert" };
+const COLORS = {
+  "#f5e0c8,#e0b888":"Dore", "#f8c8d8,#e890a8":"Rose", "#ffffff,#e8e0e8":"Blanc",
+  "#c8a880,#8f6a45":"Oud brun", "#e8c8e0,#b890c8":"Violet", "#c8e0d8,#88b8a8":"Vert"
+};
 
-function load(){ try { return JSON.parse(fs.readFileSync(DATA,"utf8")); } catch(e){ return {store:{},products:[]}; } }
+function load(){
+  try { return JSON.parse(fs.readFileSync(DATA,"utf8")); }
+  catch(e){ return {store:{name:"MA BOUTIQUE",tagline:"",whatsapp:"212600000000",city:"",banner:"Bienvenue",instagram:""},products:[]}; }
+}
 function save(d){ fs.writeFileSync(DATA, JSON.stringify(d,null,2)); }
-if(!fs.existsSync(DATA)) save({store:{name:"MA BOUTIQUE",tagline:"",whatsapp:"212600000000",city:"",banner:"Bienvenue",instagram:""},products:[]});
+if(!fs.existsSync(DATA)) save(load());
 
-const esc = s => String(s??"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const esc = s => String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 
-// ===== ADMIN =====
+// ============ LOGIN ============
 app.get("/admin", (req,res)=>{
-  if(req.query.logout){ res.redirect("/admin"); return; }
+  const err = req.query.err ? '<div style="background:#fdecea;color:#c0392b;padding:10px 14px;border-radius:10px;font-size:13px;margin-bottom:14px">Mot de passe incorrect — reessayez</div>' : "";
   res.send(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Store Admin</title><style>body{background:#fdf4f7;font-family:Segoe UI,Arial;display:flex;justify-content:center;padding-top:80px}
+<title>Store Admin</title><style>
+body{background:#fdf4f7;font-family:Segoe UI,Arial;display:flex;justify-content:center;padding-top:80px}
 .box{background:#fff;padding:30px;border-radius:16px;width:320px;box-shadow:0 4px 20px rgba(216,106,142,.2);text-align:center}
 h1{color:#d86a8e;font-size:22px;margin-bottom:6px}p{color:#a08090;font-size:13px;margin-bottom:18px}
-input{width:100%;padding:12px;border:2px solid #f0d0dc;border-radius:10px;font-size:15px;margin-bottom:12px}
-button{width:100%;background:#d86a8e;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:bold;font-size:15px}</style></head><body>
-<div class="box"><h1>Store Admin</h1><p>Connexion boutique</p>
-<form method="post" action="/admin/login"><input type="password" name="pw" placeholder="Mot de passe" required><button>Se connecter</button></form>
+input{width:100%;padding:12px;border:2px solid #f0d0dc;border-radius:10px;font-size:15px;margin-bottom:12px;box-sizing:border-box}
+button{width:100%;background:#d86a8e;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:bold;font-size:15px;cursor:pointer}</style></head><body>
+<div class="box"><h1>Store Admin</h1><p>Connexion boutique</p>${err}
+<form method="post" action="/admin/login"><input type="password" name="pw" placeholder="Mot de passe" required autofocus><button>Se connecter</button></form>
 </div></body></html>`);
 });
+
 app.post("/admin/login", (req,res)=>{
-  if(req.body.pw === PASSWORD){ res.cookie = null; res.redirect("/admin/panel"); }
-  else res.redirect("/admin");
+  if(req.body && req.body.pw === PASSWORD){
+    res.redirect("/admin/panel?k=" + encodeURIComponent(KEY));
+  } else {
+    res.redirect("/admin?err=1");
+  }
 });
-// session simple via query key
-const KEY = process.env.ADMIN_KEY || "clef12345";
+
+// ============ PANEL ============
 app.get("/admin/panel", (req,res)=>{
   if(req.query.k !== KEY) return res.redirect("/admin");
   const d = load(); const s = d.store;
-  let list = d.products.map(p=>`<div class="prod"><span><b>${esc(p.emoji)} ${esc(p.name)}</b><br>
-    <span style="font-size:12px;color:#a08090">${CATS[p.cat]||p.cat} · stock: ${esc(p.stock)}</span></span>
+  const catOpts = Object.entries(CATS).map(([k,v])=>`<option value="${k}">${v}</option>`).join("");
+  const colOpts = Object.entries(COLORS).map(([k,v])=>`<option value="${k}">${v}</option>`).join("");
+  const list = d.products.map(p=>`<div class="prod"><span><b>${esc(p.emoji)} ${esc(p.name)}</b><br>
+    <span style="font-size:12px;color:#a08090">${esc(CATS[p.cat]||p.cat)} · stock: ${esc(p.stock)}</span></span>
     <span><span class="pr">${esc(p.price)} DH</span>
-    <a href="/admin/del?id=${p.id}&k=${KEY}" onclick="return confirm('Supprimer ?')">Suppr.</a></span></div>`).join("");
+    <a href="/admin/del?id=${p.id}&k=${encodeURIComponent(KEY)}" onclick="return confirm('Supprimer ce produit ?')">Suppr.</a></span></div>`).join("") || '<p style="color:#a08090;font-size:13px">Aucun produit pour le moment.</p>';
   res.send(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Admin — ${esc(s.name)}</title><style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:Segoe UI,Arial}body{background:#fdf4f7;padding:16px}
 .wrap{max-width:520px;margin:0 auto}.card{background:#fff;border-radius:14px;padding:18px;margin-bottom:16px;box-shadow:0 2px 8px rgba(216,106,142,.12)}
 h1{color:#d86a8e;font-size:20px;margin-bottom:14px}h2{color:#5a3040;font-size:15px;margin-bottom:12px}
 label{display:block;font-size:11px;font-weight:bold;color:#a08090;margin:10px 0 4px}
-input,select{width:100%;padding:10px;border:2px solid #f0d0dc;border-radius:9px;font-size:14px}
-button.big{width:100%;margin-top:14px;background:#d86a8e;color:#fff;border:none;padding:12px;border-radius:10px;font-weight:bold;font-size:14px}
+input,select{width:100%;padding:10px;border:2px solid #f0d0dc;border-radius:9px;font-size:14px;box-sizing:border-box}
+button.big{width:100%;margin-top:14px;background:#d86a8e;color:#fff;border:none;padding:12px;border-radius:10px;font-weight:bold;font-size:14px;cursor:pointer}
 .prod{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f8e6ec;font-size:14px}
-.prod b{color:#5a3040}.prod .pr{color:#d86a8e;font-weight:bold}.prod a{font-size:12px;color:#d86a8e;margin-left:10px}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}</style></head><body><div class="wrap">
+.prod b{color:#5a3040}.prod .pr{color:#d86a8e;font-weight:bold}.prod a{font-size:12px;color:#c0392b;margin-left:10px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ok{background:#d5f5e0;color:#1e7b3c;padding:10px 14px;border-radius:10px;font-size:13px;margin-bottom:14px}</style></head><body><div class="wrap">
 <h1>⚙️ ${esc(s.name)}</h1>
+${req.query.ok?'<div class="ok">Enregistre avec succes</div>':''}
 <div class="card"><h2>+ Ajouter un produit</h2>
-<form method="post" action="/admin/add?k=${KEY}">
+<form method="post" action="/admin/add?k=${encodeURIComponent(KEY)}">
 <label>Nom du produit</label><input name="name" required>
 <div class="two"><div><label>Prix (DH)</label><input name="price" required></div>
 <div><label>Stock</label><input name="stock" value="5"></div></div>
-<div class="two"><div><label>Categorie</label><select name="cat">${Object.entries(CATS).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select></div>
-<div><label>Couleur</label><select name="color">${Object.entries(COLORS).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select></div></div>
+<div class="two"><div><label>Categorie</label><select name="cat">${catOpts}</select></div>
+<div><label>Couleur</label><select name="color">${colOpts}</select></div></div>
 <label>Emoji</label><input name="emoji" value="🧴">
-<button class="big">Ajouter</button></form></div>
+<button class="big">Ajouter le produit</button></form></div>
 <div class="card"><h2>Mes produits (${d.products.length})</h2>${list}</div>
 <div class="card"><h2>Informations boutique</h2>
-<form method="post" action="/admin/store?k=${KEY}">
-<label>Nom</label><input name="name" value="${esc(s.name)}">
+<form method="post" action="/admin/store?k=${encodeURIComponent(KEY)}">
+<label>Nom de la boutique</label><input name="name" value="${esc(s.name)}">
 <label>Slogan</label><input name="tagline" value="${esc(s.tagline)}">
 <div class="two"><div><label>WhatsApp (indicatif)</label><input name="whatsapp" value="${esc(s.whatsapp)}"></div>
 <div><label>Ville</label><input name="city" value="${esc(s.city)}"></div></div>
-<label>Banniere</label><input name="banner" value="${esc(s.banner)}">
+<label>Banniere promo</label><input name="banner" value="${esc(s.banner)}">
 <label>Instagram</label><input name="instagram" value="${esc(s.instagram)}">
 <button class="big">Enregistrer</button></form></div>
 </div></body></html>`);
 });
-app.post("/admin/add",(req,res)=>{ if(req.query.k!==KEY) return res.redirect("/admin");
-  const d=load(); d.products.push({id:Date.now(),name:req.body.name,price:req.body.price,cat:req.body.cat,color:req.body.color,emoji:req.body.emoji||"🧴",stock:req.body.stock||"5"});
-  save(d); res.redirect("/admin/panel?k="+KEY); });
-app.get("/admin/del",(req,res)=>{ if(req.query.k!==KEY) return res.redirect("/admin");
-  const d=load(); d.products=d.products.filter(p=>p.id!=req.query.id); save(d); res.redirect("/admin/panel?k="+KEY); });
-app.post("/admin/store",(req,res)=>{ if(req.query.k!==KEY) return res.redirect("/admin");
-  const d=load(); d.store={name:req.body.name,tagline:req.body.tagline,whatsapp:req.body.whatsapp.replace(/[^0-9]/g,""),city:req.body.city,banner:req.body.banner,instagram:req.body.instagram};
-  save(d); res.redirect("/admin/panel?k="+KEY); });
 
-// ===== BOUTIQUE =====
-app.get("/", (req,res)=>{
+app.post("/admin/add",(req,res)=>{
+  if(req.query.k!==KEY) return res.redirect("/admin");
+  const d=load();
+  d.products.push({id:Date.now(),name:req.body.name||"Produit",price:req.body.price||"0",
+    cat:req.body.cat||"misk",color:req.body.color||"#f5e0c8,#e0b888",
+    emoji:req.body.emoji||"🧴",stock:req.body.stock||"5"});
+  save(d); res.redirect("/admin/panel?k="+encodeURIComponent(KEY)+"&ok=1");
+});
+
+app.get("/admin/del",(req,res)=>{
+  if(req.query.k!==KEY) return res.redirect("/admin");
+  const d=load(); d.products=d.products.filter(p=>String(p.id)!==String(req.query.id));
+  save(d); res.redirect("/admin/panel?k="+encodeURIComponent(KEY));
+});
+
+app.post("/admin/store",(req,res)=>{
+  if(req.query.k!==KEY) return res.redirect("/admin");
+  const d=load();
+  d.store={name:req.body.name||"Boutique",tagline:req.body.tagline||"",
+    whatsapp:(req.body.whatsapp||"").replace(/[^0-9]/g,""),city:req.body.city||"",
+    banner:req.body.banner||"",instagram:req.body.instagram||""};
+  save(d); res.redirect("/admin/panel?k="+encodeURIComponent(KEY)+"&ok=1");
+});
+
+// ============ BOUTIQUE ============
+app.get("/",(req,res)=>{
   const d=load(); const s=d.store;
   const wa=(s.whatsapp||"").replace(/[^0-9]/g,"");
   const cats={}; d.products.forEach(p=>{ if(!cats[p.cat]) cats[p.cat]=CATS[p.cat]||p.cat; });
-  const cards=d.products.map(p=>`<div class="p" data-c="${p.cat}">
-    <div class="img" style="background:linear-gradient(135deg,${p.color||"#f5e0c8,#e0b888"})">${esc(p.emoji)}</div>
+  const cards=d.products.map(p=>{
+    const c=p.color||"#f5e0c8,#e0b888";
+    const link="https://wa.me/"+wa+"?text="+encodeURIComponent("Bonjour "+(s.name||"")+", je veux commander: "+p.name+" — "+p.price+" DH. C'est disponible ?");
+    return `<div class="p" data-c="${esc(p.cat)}">
+    <div class="img" style="background:linear-gradient(135deg,${c})">${esc(p.emoji)}</div>
     <div class="info"><div class="name">${esc(p.name)}</div><div class="price">${esc(p.price)} DH</div>
-    <a class="btn" target="_blank" href="https://wa.me/${wa}?text=${encodeURIComponent("Bonjour, je veux commander: "+p.name+" — "+p.price+" DH. C'est disponible ?")}">Je le veux</a>
-    <div class="stock">En stock (${esc(p.stock)})</div></div></div>`).join("");
+    <a class="btn" target="_blank" href="${link}">Je le veux</a>
+    <div class="stock">En stock (${esc(p.stock)})</div></div></div>`;
+  }).join("");
   res.send(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(s.name)}</title><style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:Segoe UI,Tahoma,sans-serif}body{background:#fdf4f7}
@@ -120,8 +155,8 @@ h1{font-size:20px;letter-spacing:1px}.sub{font-size:12px;color:#ffe4ee;margin-to
 <div class="head"><h1>${esc(s.name)}</h1><div class="sub">${esc(s.tagline)} · ${esc(s.city)}</div>
 <div class="meta"><span class="chip">🚚 Livraison 24-48h</span><span class="chip">💵 Paiement a la livraison</span></div></div>
 <div class="banner">✨ ${esc(s.banner)}</div>
-<div class="cats"><span class="cat active" onclick="flt('all',this)">Tous</span>${Object.entries(cats).map(([k,v])=>`<span class="cat" onclick="flt('${k}',this)">${esc(v)}</span>`).join("")}</div>
-<div class="grid">${cards}</div>
+<div class="cats"><span class="cat active" onclick="flt('all',this)">Tous</span>${Object.entries(cats).map(([k,v])=>`<span class="cat" onclick="flt('${esc(k)}',this)">${esc(v)}</span>`).join("")}</div>
+<div class="grid">${cards||'<p style="padding:20px;color:#a08090">Bientot disponible.</p>'}</div>
 <div class="contact">📞 <a href="tel:+${wa}">0${wa.slice(3)}</a><br><span style="font-size:11px;color:#c090a8">${esc(s.instagram)}</span></div>
 <div class="footer">Propulsé par <b style="color:#d86a8e">Store</b> — clikclak.ma</div></div>
 <script>function flt(c,el){document.querySelectorAll('.cat').forEach(x=>x.classList.remove('active'));el.classList.add('active');
@@ -129,4 +164,4 @@ document.querySelectorAll('.p').forEach(p=>{p.classList.toggle('hide',c!=='all'&
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, ()=>console.log("Store OK sur port "+PORT));
+app.listen(PORT, ()=>console.log("Store OK — port "+PORT));
