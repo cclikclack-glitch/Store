@@ -1,1 +1,41 @@
-{"store":{"name":"AQUA ROSA","tagline":"Parfumerie · Soins · Beaute · Makeup","whatsapp":"212762925771","city":"Casablanca","banner":"Offre de la semaine : -20% sur les muscs","instagram":"@aqua.rosa_"},"products":[{"id":1,"name":"Musc de Taif — original","price":"250","cat":"misk","color":"#f5e0c8,#e0b888","emoji":"🧴","stock":"5"},{"id":2,"name":"Rose de Damas — 100ml","price":"180","cat":"rose","color":"#f8c8d8,#e890a8","emoji":"🌹","stock":"8"},{"id":3,"name":"Oud Royal cambodgien","price":"350","cat":"oud","color":"#c8a880,#8f6a45","emoji":"🪵","stock":"3"}]}
+{root@0348f5a02ad5:/app# cat data.json
+{"store":{"name":"AQUA ROSA","tagline":"Parfumerie · Soins · Beaute · Makeup","whatsapp":"212762925771","city":"Casablanca","banner":"Offre de la semaine : -20% sur les muscs","instagram":"@aqua.rosa_"},"products":[{"id":1,"name":"Musc de Taif — original","price":"250","cat":"misk","color":"#f5e0c8,#e0b888","emoji":"🧴","stock":"5"},{"id":2,"name":"Rose de Damas — 100ml","price":"180","cat":"rose","color":"#f8c8d8,#e890a8","emoji":"🌹","stock":"8"},{"id":3,"name":"Oud Royal cambodgien","price":"350","cat":"oud","color":"#c8a880,#8f6a45","emoji":"🪵","stock":"3"}]}root@0348f5a02ad5:/app# 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+}]}
